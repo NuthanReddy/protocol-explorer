@@ -22,3 +22,7 @@ Keyboard shortcuts: L toggles the catalog; D toggles diagram-only mode; F toggle
 ## Educational scope
 
 This is a local frontend, not a network sniffer or full protocol simulator. Exchanges, sizes, and timings are synthetic; some multi-message handshakes and upstream hops are summarized. OSI layers are teaching approximations. The hexadecimal view encodes illustrative field text, not real serialized network packets. Only English is available. Optional Google Fonts have local fallback stacks. No deployment or backend service is required.
+
+## GitHub Pages
+
+The public site is hosted at https://nuthanreddy.github.io/protocol-explorer/. Pushes to `main` run the catalog checks, build the site, and deploy through the GitHub Pages workflow. Production builds use the `/protocol-explorer/` asset base; local development continues to use `/`.
