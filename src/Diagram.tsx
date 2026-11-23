@@ -1,12 +1,12 @@
 import type { KeyboardEvent } from 'react';
 import { addressFor, packetTime } from './catalog';
 import type { NodeId, Protocol } from './catalog';
+import { packetRoute, routePosition } from './playback';
 
 interface Props {
   protocol: Protocol;
   cursor: number;
-  playing: boolean;
-  speed: number;
+  progress: number;
   reducedMotion: boolean;
   view: 'network' | 'sequence';
   onSelect: (index: number) => void;
@@ -50,17 +50,20 @@ function Device({ id, title, subtitle, active }: { id: NodeId; title: string; su
   </g>;
 }
 
-function Network({ protocol, cursor, playing, speed, reducedMotion }: Omit<Props, 'view' | 'onSelect'>) {
+function Network({ protocol, cursor, progress, reducedMotion }: Omit<Props, 'view' | 'onSelect'>) {
   const packet = protocol.packets[cursor];
-  const activeNodes = packet ? [packet.source, packet.destination] : [];
-  const showDns = protocol.packets.some(p => p.source === 'dns' || p.destination === 'dns');
-  const localLink = protocol.layer === 2 || protocol.name === 'IGMP';
-  const showInternet = !localLink;
+  const routes = protocol.packets.map(p => packetRoute(p, protocol));
+  const nodes = new Set(routes.flat());
+  const route = packet ? routes[cursor] : [];
+  const movement = packet ? routePosition(route.map(id => positions[id]), reducedMotion ? 1 : progress) : null;
+  const activeNodes = movement ? route.filter(id => Math.hypot(positions[id][0] - movement.point[0], positions[id][1] - movement.point[1]) < 55) : [];
   const line = (a: NodeId, b: NodeId) => `M${positions[a].join(',')} L${positions[b].join(',')}`;
-  const path = packet ? packet.source === 'router' || packet.destination === 'router'
-    ? line(packet.source, packet.destination)
-    : `M${positions[packet.source].join(',')} L${positions.router.join(',')} L${positions[packet.destination].join(',')}` : '';
-  return <svg viewBox="0 0 1000 580" className="network-svg" role="img" aria-label={`${protocol.name} network diagram${packet ? `: ${packet.info}` : ''}`}>
+  const edges = new Map<string, [NodeId, NodeId]>();
+  for (const path of routes) {
+    for (let i = 1; i < path.length; i++) edges.set([path[i - 1], path[i]].sort().join('-'), [path[i - 1], path[i]]);
+  }
+  const path = route.map((id, index) => `${index ? 'L' : 'M'}${positions[id].join(',')}`).join(' ');
+  return <svg viewBox="0 0 1000 580" className="network-svg" role="img" data-progress={progress} data-packet={cursor} aria-label={`${protocol.name} network diagram${packet ? `: ${packet.info}` : ''}`}>
     <defs>
       <pattern id="iso-grid" width="80" height="46" patternUnits="userSpaceOnUse">
         <path d="M-40 0 40 46 120 0M-40 46 40 0 120 46" fill="none" stroke="var(--grid)" strokeWidth=".6" />
@@ -69,30 +72,36 @@ function Network({ protocol, cursor, playing, speed, reducedMotion }: Omit<Props
     </defs>
     <rect x="30" y="20" width="940" height="525" fill="url(#iso-grid)" opacity=".7" />
     <path d="m100 385 360-180 415 207-359 181Z" fill="var(--panel)" fillOpacity=".3" stroke="var(--grid)" />
-    {(['client', ...(showDns ? ['dns'] : []), 'server', ...(showInternet ? ['internet'] : [])] as NodeId[]).map(id => <path key={id} d={line('router', id)} stroke="var(--line)" strokeWidth="1.4" strokeDasharray="5 7" fill="none" markerEnd="url(#network-arrow)" />)}
-    {packet && <g key={`${protocol.id}-${cursor}`}>
+    {[...edges].map(([key, [from, to]]) => <path key={key} d={line(from, to)} stroke="var(--line)" strokeWidth="1.4" strokeDasharray="5 7" fill="none" markerEnd="url(#network-arrow)" />)}
+    {packet && <g>
       <path d={path} fill="none" stroke={colors[packet.kind]} strokeWidth="2" strokeDasharray="5 7" opacity=".85" />
-      {playing && !reducedMotion ? <circle r="5" fill={colors[packet.kind]} stroke="var(--panel)" strokeWidth="2"><animateMotion dur={`${.9 / speed}s`} path={path} repeatCount="indefinite" /></circle> : <circle cx={(positions[packet.source][0] + positions.router[0]) / 2} cy={(positions[packet.source][1] + positions.router[1]) / 2} r="5" fill={colors[packet.kind]} />}
+      {movement && <polyline points={movement.trail.map(point => point.join(',')).join(' ')} fill="none" stroke={colors[packet.kind]} strokeWidth="3" opacity=".75" />}
     </g>}
-    {showDns && <Device id="dns" title="DNS Resolver" subtitle={addressFor('dns', protocol)} active={activeNodes.includes('dns')} />}
-    <Device id="server" title={protocol.server} subtitle={addressFor('server', protocol)} active={activeNodes.includes('server')} />
-    {showInternet && <Device id="internet" title={protocol.name === 'Reverse Proxy' ? 'Upstream service' : 'Internet'} subtitle="External network" active={activeNodes.includes('internet')} />}
-    <Device id="router" title="Router" subtitle={addressFor('router', protocol)} active={activeNodes.includes('router')} />
+    {nodes.has('dns') && <Device id="dns" title="DNS Resolver" subtitle={addressFor('dns', protocol)} active={activeNodes.includes('dns')} />}
+    {nodes.has('server') && <Device id="server" title={protocol.server} subtitle={addressFor('server', protocol)} active={activeNodes.includes('server')} />}
+    {nodes.has('internet') && <Device id="internet" title={protocol.name === 'Reverse Proxy' ? 'Upstream service' : 'Internet'} subtitle="External network" active={activeNodes.includes('internet')} />}
+    {nodes.has('router') && <Device id="router" title="Router" subtitle={addressFor('router', protocol)} active={activeNodes.includes('router')} />}
     <Device id="client" title={protocol.name === 'RADIUS' ? 'Access Server' : 'Client'} subtitle={addressFor('client', protocol)} active={activeNodes.includes('client')} />
+    {packet && movement && <g className="network-packet-marker" data-source={packet.source} data-destination={packet.destination} data-route={route.join(',')} transform={`translate(${movement.point.join(' ')})`}>
+      <circle r="12" fill="var(--panel)" stroke={colors[packet.kind]} strokeWidth="1" opacity=".75" />
+      <rect x="-6" y="-4" width="12" height="8" rx="2" fill={colors[packet.kind]} stroke="var(--panel)" strokeWidth="1" />
+      <rect x="-30" y="-33" width="60" height="17" rx="3" fill="var(--panel)" stroke={colors[packet.kind]} strokeWidth=".8" />
+      <text y="-21" textAnchor="middle" fill={colors[packet.kind]} fontSize="9">{packet.protocol}</text>
+    </g>}
     <text x="47" y="52" className="map-coordinate">TOPOLOGY / 01</text>
     <path d="M42 555h25M54 542v25" stroke="var(--muted)" opacity=".5" />
     <text x="80" y="559" className="map-coordinate">ILLUSTRATIVE NETWORK · NOT LIVE TRAFFIC</text>
   </svg>;
 }
 
-function Sequence({ protocol, cursor, onSelect }: Pick<Props, 'protocol' | 'cursor' | 'onSelect'>) {
+function Sequence({ protocol, cursor, progress, reducedMotion, onSelect }: Pick<Props, 'protocol' | 'cursor' | 'progress' | 'reducedMotion' | 'onSelect'>) {
   const participants = (['client', 'router', 'dns', 'server', 'internet'] as NodeId[]).filter(id => id === 'client' || protocol.packets.some(p => p.source === id || p.destination === id));
   const x = (id: NodeId) => 120 + participants.indexOf(id) * (760 / Math.max(1, participants.length - 1));
   const height = Math.max(420, 130 + protocol.packets.length * 62);
   const activate = (event: KeyboardEvent<SVGGElement>, i: number) => {
     if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(i); }
   };
-  return <svg viewBox={`0 0 1000 ${height}`} className="sequence-svg" aria-label={`${protocol.name} sequence diagram`}>
+  return <svg viewBox={`0 0 1000 ${height}`} className="sequence-svg" data-progress={progress} data-packet={cursor} aria-label={`${protocol.name} sequence diagram`}>
     <defs>{Object.entries(colors).map(([kind, color]) => <marker key={kind} id={`sequence-${kind}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="m1 1 8 4-8 4" fill="none" stroke={color} strokeWidth="1.5" /></marker>)}</defs>
     {participants.map(id => <g key={id}>
       <rect x={x(id) - 95} y="22" width="190" height="57" rx="3" fill="var(--raised)" stroke="var(--border)" />
@@ -103,17 +112,20 @@ function Sequence({ protocol, cursor, onSelect }: Pick<Props, 'protocol' | 'curs
     {protocol.packets.map((packet, index) => {
       const y = 120 + index * 62;
       const from = x(packet.source), to = x(packet.destination);
+      const revealed = cursor < 0 || index < cursor ? 1 : index === cursor ? reducedMotion ? 1 : progress : 0;
       return <g key={index} role="button" tabIndex={0} aria-label={`Inspect packet ${index + 1}: ${packet.info}`} onClick={() => onSelect(index)} onKeyDown={event => activate(event, index)} className={`sequence-packet ${cursor === index ? 'selected' : ''}`}>
         <rect x="30" y={y - 25} width="940" height="54" rx="3" fill={cursor === index ? 'var(--selection)' : 'transparent'} />
         <text x="37" y={y + 16} className="map-coordinate">{packetTime(index)}s</text>
-        <path d={`M${from} ${y + 10}H${to}`} fill="none" stroke={colors[packet.kind]} strokeWidth="1.6" markerEnd={`url(#sequence-${packet.kind})`} />
-        <text x={(from + to) / 2} y={y - 2} textAnchor="middle" fill={colors[packet.kind]} className="sequence-label">{packet.info.length > 43 ? `${packet.info.slice(0, 40)}…` : packet.info}</text>
+        <path d={`M${from} ${y + 10}H${to}`} fill="none" stroke={colors[packet.kind]} strokeWidth="1.2" opacity={cursor < 0 ? .7 : .2} markerEnd={`url(#sequence-${packet.kind})`} />
+        {cursor >= 0 && revealed > 0 && <path d={`M${from} ${y + 10}H${from + (to - from) * revealed}`} fill="none" stroke={colors[packet.kind]} strokeWidth="2" markerEnd={`url(#sequence-${packet.kind})`} />}
+        <text x={(from + to) / 2} y={y - 2} textAnchor="middle" fill={colors[packet.kind]} opacity={cursor < 0 || index <= cursor ? 1 : .35} className="sequence-label">{packet.info.length > 43 ? `${packet.info.slice(0, 40)}…` : packet.info}</text>
         <circle cx={from} cy={y + 10} r="3" fill={colors[packet.kind]} />
+        {cursor === index && <circle className="sequence-packet-marker" data-source={packet.source} data-destination={packet.destination} cx={from + (to - from) * revealed} cy={y + 10} r="6" fill={colors[packet.kind]} stroke="var(--panel)" strokeWidth="2" />}
       </g>;
     })}
   </svg>;
 }
 
 export default function Diagram(props: Props) {
-  return props.view === 'network' ? <Network protocol={props.protocol} cursor={props.cursor} playing={props.playing} speed={props.speed} reducedMotion={props.reducedMotion} /> : <Sequence protocol={props.protocol} cursor={props.cursor} onSelect={props.onSelect} />;
+  return props.view === 'network' ? <Network protocol={props.protocol} cursor={props.cursor} progress={props.progress} reducedMotion={props.reducedMotion} /> : <Sequence protocol={props.protocol} cursor={props.cursor} progress={props.progress} reducedMotion={props.reducedMotion} onSelect={props.onSelect} />;
 }

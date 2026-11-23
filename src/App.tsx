@@ -3,6 +3,8 @@ import { Box, Search, PanelLeft, Maximize, Keyboard, Sun, Moon, ChevronRight, Ch
 import Diagram from './Diagram';
 import { protocols, layerNames, addressFor, packetTime } from './catalog';
 import type { Category, Packet, Protocol } from './catalog';
+import { advanceTimeline } from './playback';
+import type { Timeline } from './playback';
 
 type Modal = 'search' | 'shortcuts' | 'language' | null;
 const categories = ['All', 'Core', 'Application', 'Security'] as const;
@@ -51,13 +53,17 @@ export default function App() {
   const [modal, setModal] = useState<Modal>(null);
   const [query, setQuery] = useState('');
   const [searchIndex, setSearchIndex] = useState(0);
-  const [cursor, setCursor] = useState(-1);
+  const [timeline, setTimeline] = useState<Timeline>({ cursor: -1, progress: 0 });
   const [inspection, setInspection] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [zoom, setZoom] = useState(1);
   const [notice, setNotice] = useState('');
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const timelineRef = useRef(timeline);
+  const speedRef = useRef(speed);
+  speedRef.current = speed;
+  const cursor = timeline.cursor;
   const dialog = useRef<HTMLDialogElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   const table = useRef<HTMLDivElement>(null);
@@ -68,6 +74,14 @@ export default function App() {
   const currentPacket = protocol.packets[cursor];
   const currentStep = currentPacket?.step ?? 0;
 
+  function updateTimeline(next: Timeline) {
+    timelineRef.current = next;
+    setTimeline(next);
+  }
+  function setCursor(value: number | ((previous: number) => number)) {
+    const next = typeof value === 'function' ? value(timelineRef.current.cursor) : value;
+    updateTimeline({ cursor: next, progress: next < 0 ? 0 : 1 });
+  }
   function selectProtocol(id: string) {
     setProtocolId(id); setCursor(-1); setInspection(null); setPlaying(false); setModal(null);
     setZoom(1);
@@ -78,7 +92,15 @@ export default function App() {
   function selectPacket(index: number) { setCursor(index); setInspection(index); setPlaying(false); }
   function advance() { setPlaying(false); setCursor(value => Math.min(value + 1, protocol.packets.length - 1)); }
   function togglePlayback() {
-    if (!playing && cursor === protocol.packets.length - 1) { setCursor(-1); setInspection(null); }
+    if (!playing) {
+      const current = timelineRef.current;
+      if (current.cursor < 0 || current.cursor === protocol.packets.length - 1 && current.progress === 1) {
+        updateTimeline({ cursor: 0, progress: 0 });
+        setInspection(null);
+      } else if (current.progress === 1) {
+        updateTimeline({ cursor: current.cursor + 1, progress: 0 });
+      }
+    }
     setPlaying(value => !value);
   }
   function toggleTheme() {
@@ -103,10 +125,22 @@ export default function App() {
   }, []);
   useEffect(() => {
     if (!playing) return;
-    const timer = window.setInterval(() => setCursor(value => Math.min(value + 1, protocol.packets.length - 1)), 1000 / speed);
-    return () => window.clearInterval(timer);
-  }, [playing, speed, protocol]);
-  useEffect(() => { if (cursor >= protocol.packets.length - 1) setPlaying(false); }, [cursor, protocol]);
+    let frame: number;
+    let previous: number | null = null;
+    function tick(time: number) {
+      const elapsed = previous === null ? 0 : time - previous;
+      previous = time;
+      const next = advanceTimeline(timelineRef.current, elapsed, speedRef.current, protocol.packets.length);
+      updateTimeline(next);
+      if (next.cursor === protocol.packets.length - 1 && next.progress === 1) {
+        setPlaying(false);
+      } else {
+        frame = window.requestAnimationFrame(tick);
+      }
+    }
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [playing, protocol]);
   useEffect(() => {
     const container = table.current;
     const row = container?.querySelector(`[data-packet="${cursor}"]`);
@@ -191,8 +225,8 @@ export default function App() {
       </aside>}
 
       <section className="diagram-panel panel">
-        <div className="diagram-toolbar"><div className="view-tabs" role="tablist" aria-label="Diagram view"><button role="tab" aria-selected={view === 'network'} className={view === 'network' ? 'active' : ''} onClick={() => setView('network')}><Network size={14} />NETWORK</button><button role="tab" aria-selected={view === 'sequence'} className={view === 'sequence' ? 'active' : ''} onClick={() => setView('sequence')}><ListOrdered size={14} />SEQUENCE</button></div><span className="diagram-state"><span className={playing ? 'status-dot' : 'status-dot idle'} />{playing ? 'TRANSMITTING' : cursor < 0 ? 'READY TO EXPLORE' : cursor === protocol.packets.length - 1 ? 'FLOW COMPLETE' : 'PAUSED'}</span></div>
-        <div className={`diagram-stage ${view}`}><div style={{ transform: `scale(${zoom})` }} className="diagram-content"><Diagram protocol={protocol} cursor={cursor} playing={playing} speed={speed} reducedMotion={reducedMotion} view={view} onSelect={selectPacket} /></div></div>
+        <div className="diagram-toolbar"><div className="view-tabs" role="tablist" aria-label="Diagram view"><button role="tab" aria-selected={view === 'network'} className={view === 'network' ? 'active' : ''} onClick={() => setView('network')}><Network size={14} />NETWORK</button><button role="tab" aria-selected={view === 'sequence'} className={view === 'sequence' ? 'active' : ''} onClick={() => setView('sequence')}><ListOrdered size={14} />SEQUENCE</button></div><span className="diagram-state"><span className={playing ? 'status-dot' : 'status-dot idle'} />{playing ? 'TRANSMITTING' : cursor < 0 ? 'READY TO EXPLORE' : cursor === protocol.packets.length - 1 && timeline.progress === 1 ? 'FLOW COMPLETE' : 'PAUSED'}{playing && reducedMotion && ' · REDUCED MOTION'}</span></div>
+        <div className={`diagram-stage ${view}`}><div style={{ transform: `scale(${zoom})` }} className="diagram-content"><Diagram protocol={protocol} cursor={cursor} progress={timeline.progress} reducedMotion={reducedMotion} view={view} onSelect={selectPacket} /></div></div>
         <div className="diagram-bottom"><div className="step-narration"><span className="step-counter">{String(currentStep + 1).padStart(2, '0')}<small>/{String(protocol.steps.length).padStart(2, '0')}</small></span><div><h2>{protocol.steps[currentStep].title}</h2><p>{protocol.steps[currentStep].explanation}</p></div></div><div className="zoom-controls"><button aria-label="Zoom out" disabled={zoom <= .8} onClick={() => setZoom(value => Math.max(.8, value - .1))}><Minus size={12} /></button><span>{Math.round(zoom * 100)}%</span><button aria-label="Zoom in" disabled={zoom >= 1.4} onClick={() => setZoom(value => Math.min(1.4, value + .1))}><Plus size={12} /></button></div></div>
       </section>
 
@@ -220,7 +254,7 @@ export default function App() {
         <div className="packet-table-scroll" ref={table}><table className="packet-table"><thead><tr><th>No.</th><th>Time</th><th>Source</th><th>Destination</th><th>Protocol</th><th>Info</th><th>Size</th></tr></thead><tbody>{protocol.packets.map((packet, index) => <tr key={index} data-packet={index} className={`${cursor === index ? 'current-packet' : ''} ${cursor >= index ? 'transmitted' : ''} ${packet.kind}`} onClick={() => selectPacket(index)}>
           <td><button className="packet-select" aria-current={cursor === index ? 'true' : undefined} aria-label={`Inspect packet ${index + 1}: ${packet.info}`} onClick={event => { event.stopPropagation(); selectPacket(index); }}>{String(index + 1).padStart(2, '0')}</button></td><td>{packetTime(index)}<small>s</small></td><td>{addressFor(packet.source, protocol)}</td><td>{addressFor(packet.destination, protocol)}</td><td><span className={`wire-badge ${packet.kind}`}>{packet.protocol}</span></td><td className="info-cell">{packet.info}</td><td>{packet.size}<small> B</small></td>
         </tr>)}</tbody></table></div>
-        <div className="flow-footer"><span>{String(Math.max(0, cursor + 1)).padStart(2, '0')} / {String(protocol.packets.length).padStart(2, '0')} PACKETS</span><div className="progress-track"><div style={{ transform: `scaleX(${(cursor + 1) / protocol.packets.length})` }} /></div><span>ILLUSTRATIVE DATA</span></div>
+        <div className="flow-footer"><span>{String(Math.max(0, cursor + 1)).padStart(2, '0')} / {String(protocol.packets.length).padStart(2, '0')} PACKETS</span><div className="progress-track"><div style={{ transform: `scaleX(${cursor < 0 ? 0 : (cursor + timeline.progress) / protocol.packets.length})`, transition: playing ? 'none' : undefined }} /></div><span>ILLUSTRATIVE DATA</span></div>
       </section>
     </main>
     <footer className="page-footer"><span>Understand the network. One packet at a time.</span><span>Original lessons & diagrams<span className="footer-separator">/</span><button onClick={() => setModal('shortcuts')}>Press <kbd>?</kbd> for shortcuts</button></span></footer>

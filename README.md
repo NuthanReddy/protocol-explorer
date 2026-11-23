@@ -15,7 +15,7 @@ Open the URL printed by Vite. `npm run build` checks TypeScript and produces `di
 
 ## Explore
 
-Select one of 39 protocols or search with Ctrl/Cmd+K. Category tabs narrow the catalog. Network and Sequence views share the same packet timeline. Play, step, previous, reset, and speed controls operate on that timeline; select a row or sequence arrow to inspect illustrative fields and a UTF-8 hexadecimal preview. Theme preferences are saved locally.
+Select one of 39 protocols or search with Ctrl/Cmd+K. Category tabs narrow the catalog. Network and Sequence views share the same packet timeline. During playback, each packet travels once from source to destination along its route; sequence arrows reveal the same progress. Pause preserves the exact position, speed changes apply without restarting the packet, and completion waits for the final arrival. Step and packet selection show an arrived packet. Reduced-motion mode keeps markers stationary while the packet timeline still advances. Select a row or sequence arrow to inspect illustrative fields and a UTF-8 hexadecimal preview. Theme preferences are saved locally.
 
 Keyboard shortcuts: L toggles the catalog; D toggles diagram-only mode; F toggles browser fullscreen; Space plays/pauses; arrows move between packets; R resets; ? displays help. Interactive controls keep their native keyboard behavior.
 
