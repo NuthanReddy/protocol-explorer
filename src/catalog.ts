@@ -1,3 +1,6 @@
+import { decodePacket } from './wire.ts';
+import type { WireExample } from './wire';
+
 export type Category = 'Core' | 'Application' | 'Security';
 export type NodeId = 'client' | 'router' | 'dns' | 'server' | 'internet';
 export type PacketKind = 'dns' | 'tcp' | 'request' | 'response';
@@ -10,6 +13,7 @@ export interface Packet {
   kind: PacketKind;
   step: number;
   payload: string;
+  wire?: WireExample;
 }
 export interface LessonStep { title: string; explanation: string }
 export interface Protocol {
@@ -31,7 +35,7 @@ export interface Protocol {
 type Event = [label: string, explanation: string, reply?: boolean, wire?: string, payload?: string, endpoint?: NodeId];
 type Definition = [name: string, longName: string, category: Category, layer: number, port: string, transport: string, format: string, methods: string, standard: string, description: string, server: string, events: Event[]];
 const definitions: Definition[] = [
-  ['HTTP', 'Hypertext Transfer Protocol', 'Application', 7, '80', 'TCP', 'Text headers + body', 'GET, POST, PUT, DELETE', 'RFC 9110', 'A browser asks for a resource, and a web server returns a status, headers, and content. HTTP makes the web readable, but does not encrypt the conversation on its own.', 'Web Server', [
+  ['HTTP', 'Hypertext Transfer Protocol', 'Application', 7, '80', 'TCP', 'Text headers + body', 'GET, POST, PUT, DELETE, HEAD', 'RFC 9110 / RFC 9112', 'A browser asks for a resource, and a web server returns a status, headers, and content. HTTP makes the web readable, but does not encrypt the conversation on its own.', 'Web Server', [
     ['Client request', 'The browser turns a URL into a request for a resource. Before sending it, it needs the address of the host.'],
     ['DNS resolution', 'The resolver translates example.test into an IP address. A cached answer can skip this round trip.'],
     ['TCP connection', 'SYN, SYN-ACK, and ACK establish a reliable connection before the HTTP bytes travel.'],
@@ -117,6 +121,7 @@ const definitions: Definition[] = [
   ['DNS', 'Domain Name System', 'Core', 7, '53', 'UDP / TCP', 'Binary records', 'QUERY, response', 'RFC 1034 / RFC 1035', 'DNS maps names to records such as IP addresses. Resolvers cache answers for their time-to-live, reducing repeated lookups and the work done by authoritative servers.', 'Authoritative DNS', [
     ['A-record query', 'Ask a recursive resolver for the IPv4 address of example.test.', false, 'DNS', 'QNAME=example.test; QTYPE=A', 'dns'],
     ['Recursive lookup', 'On a cache miss, the resolver follows delegations to an authority.', false, 'DNS', 'QNAME=example.test; recursion path simplified'],
+    ['Authoritative answer', 'The authority answers the resolver with an A record. Root and TLD referrals are summarized in this example.', true, 'DNS', 'A=203.0.113.10; TTL=300'],
     ['A-record answer', 'The resolver returns an address and cache lifetime.', true, 'DNS', 'A=203.0.113.10; TTL=300', 'dns'],
   ]],
   ['DNS over HTTPS', 'DNS over HTTPS', 'Security', 7, '443', 'HTTPS', 'DNS wire format / HTTPS', 'GET, POST', 'RFC 8484', 'DoH puts a DNS query inside an HTTPS request. Encryption hides the query from observers on the local path, but the chosen resolver can still see the names being requested.', 'DoH Resolver', [
@@ -297,13 +302,28 @@ http.packets = [
   { source: 'dns', destination: 'client', protocol: 'DNS', info: 'Standard query response A 203.0.113.10', size: 88, kind: 'dns', step: 1, payload: 'ID=0x4a2b; A=203.0.113.10; TTL=300' },
   { source: 'client', destination: 'server', protocol: 'TCP', info: '51432 → 80 [SYN] Seq=0', size: 66, kind: 'tcp', step: 2, payload: 'Flags=SYN; Seq=0; Window=65535; MSS=1460' },
   { source: 'server', destination: 'client', protocol: 'TCP', info: '80 → 51432 [SYN, ACK] Seq=0 Ack=1', size: 66, kind: 'tcp', step: 2, payload: 'Flags=SYN,ACK; Seq=0; Ack=1; Window=65535' },
-  { source: 'client', destination: 'server', protocol: 'TCP', info: '51432 → 80 [ACK] Seq=1 Ack=1', size: 54, kind: 'tcp', step: 2, payload: 'Flags=ACK; Seq=1; Ack=1' },
+  { source: 'client', destination: 'server', protocol: 'TCP', info: '51432 → 80 [ACK] Seq=1 Ack=1', size: 60, kind: 'tcp', step: 2, payload: 'Flags=ACK; Seq=1; Ack=1' },
   { source: 'client', destination: 'server', protocol: 'HTTP', info: 'GET / HTTP/1.1', size: 132, kind: 'request', step: 3, payload: 'GET / HTTP/1.1\r\nHost: example.test\r\nAccept: text/html\r\n\r\n' },
-  { source: 'server', destination: 'client', protocol: 'HTTP', info: 'HTTP/1.1 200 OK (text/html)', size: 248, kind: 'response', step: 4, payload: 'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>Hello, internet.</h1>' },
+  { source: 'server', destination: 'client', protocol: 'HTTP', info: 'HTTP/1.1 200 OK (text/html)', size: 248, kind: 'response', step: 3, payload: 'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 25\r\n\r\n<h1>Hello, internet.</h1>' },
 ];
 
 const dns = protocols.find(p => p.name === 'DNS')!;
 dns.packets[1].source = 'dns';
+dns.packets[2].destination = 'dns';
+const dnsWire = (reply: boolean, recursive = true): WireExample => ({ type: 'dns', id: 0x4a2b, name: 'example.test', sourcePort: reply ? 53 : 51432, destinationPort: reply ? 51432 : 53, recursive, ...(reply ? { answer: '203.0.113.10', ttl: 300, authoritative: !recursive } : {}) });
+http.packets[0].wire = dnsWire(false);
+http.packets[1].wire = dnsWire(true);
+dns.packets.forEach((packet, index) => { packet.wire = dnsWire(index >= 2, index === 0 || index === 3); });
+const tcpWire = (sourcePort: number, destinationPort: number, sequence: number, acknowledgment: number, flags: number, synOptions = false): WireExample => ({ type: 'tcp', sourcePort, destinationPort, sequence, acknowledgment, flags, synOptions });
+http.packets[2].wire = tcpWire(51432, 80, 0, 0, 2, true);
+http.packets[3].wire = tcpWire(80, 51432, 0, 1, 18, true);
+http.packets[4].wire = tcpWire(51432, 80, 1, 1, 16);
+http.packets[5].wire = { type: 'http', sourcePort: 51432, destinationPort: 80, sequence: 1, acknowledgment: 1, flags: 24 };
+http.packets[6].wire = { type: 'http', sourcePort: 80, destinationPort: 51432, sequence: 1, acknowledgment: 1 + new TextEncoder().encode(http.packets[5].payload).length, flags: 24 };
+const tcp = protocols.find(p => p.name === 'TCP')!;
+tcp.packets[0].wire = tcpWire(51432, 80, 1000, 0, 2, true);
+tcp.packets[1].wire = tcpWire(80, 51432, 5000, 1001, 18, true);
+tcp.packets[2].wire = tcpWire(51432, 80, 1001, 5001, 16);
 const ip = protocols.find(p => p.name === 'IP')!;
 ip.packets[1].source = 'router';
 const reverseProxy = protocols.find(p => p.name === 'Reverse Proxy')!;
@@ -320,3 +340,10 @@ export function addressFor(id: NodeId, protocol: Protocol): string {
   return nodeAddresses[id];
 }
 export function packetTime(index: number): string { return (index * 0.028 + (index > 1 ? 0.012 : 0)).toFixed(3); }
+
+for (const protocol of protocols) {
+  for (const [index, packet] of protocol.packets.entries()) {
+    const decoded = decodePacket(packet, addressFor(packet.source, protocol), addressFor(packet.destination, protocol), index);
+    if (decoded) packet.size = decoded.bytes.length;
+  }
+}

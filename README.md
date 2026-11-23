@@ -11,17 +11,19 @@ npm install
 npm run dev
 ```
 
-Open the URL printed by Vite. `npm run build` checks TypeScript and produces `dist`; `npm run preview` serves the build. `npm test` checks the original protocol catalog. With the dev server running on port 5173, `npx playwright test explorer.spec.ts` checks the interactive dashboard and all 39 lessons (install Chromium with `npx playwright install chromium` if needed).
+Open the URL printed by Vite. `npm run build` checks TypeScript and produces `dist`; `npm run preview` serves the build. `npm test` checks the catalog, playback clock, and synthetic wire encoding. With the dev server running on port 5173, `npx playwright test spec.ts` checks the dashboard, all 39 lessons, animation, packet inspection, and mobile stage navigation (install Chromium with `npx playwright install chromium` if needed). Set `PREVIEW_URL` to run these checks against the deployed site.
 
 ## Explore
 
-Select one of 39 protocols or search with Ctrl/Cmd+K. Category tabs narrow the catalog. Network and Sequence views share the same packet timeline. During playback, each packet travels once from source to destination along its route; sequence arrows reveal the same progress. Pause preserves the exact position, speed changes apply without restarting the packet, and completion waits for the final arrival. Step and packet selection show an arrived packet. Reduced-motion mode keeps markers stationary while the packet timeline still advances. Select a row or sequence arrow to inspect illustrative fields and a UTF-8 hexadecimal preview. Theme preferences are saved locally.
+Select one of 39 protocols or search protocols and individual lesson stages with Ctrl/Cmd+K or `/`. Selecting a stage plays only that stage's packets; local actions such as preparing a request and rendering a page do not invent packets. Category tabs narrow the catalog. Network and Sequence views share the same packet timeline. Each packet travels once along its route; pause preserves the exact position, speed changes apply without restarting, and completion waits for the final arrival. Reduced-motion mode keeps markers stationary while the timeline advances. On narrow screens the catalog is a disclosure, the overview precedes the packet table, and playback controls remain reachable at the bottom.
 
-Keyboard shortcuts: L toggles the catalog; D toggles diagram-only mode; F toggles browser fullscreen; Space plays/pauses; arrows move between packets; R resets; ? displays help. Interactive controls keep their native keyboard behavior.
+Select a row or sequence arrow to inspect a packet, including in diagram-only view. Supported DNS/UDP, TCP handshake, and HTTP examples expose constructed Ethernet/IPv4 frames, computed checksums, field byte ranges, and hexadecimal/ASCII inspection. Select a field to highlight its bytes. Unmodeled events show a clearly labeled message summary instead of fabricated wire bytes. Theme preferences are saved locally.
+
+Keyboard shortcuts: L toggles the catalog; D toggles diagram-only mode; V changes diagram view; T changes theme; brackets adjust speed; 1–9 select a lesson stage; F toggles fullscreen; Space plays/pauses; arrows move between stages (between packets while inspecting); S steps one packet; R resets; ? displays help. Escape closes the inspector or leaves the selected stage. Interactive controls keep their native keyboard behavior.
 
 ## Educational scope
 
-This is a local frontend, not a network sniffer or full protocol simulator. Exchanges, sizes, and timings are synthetic; some multi-message handshakes and upstream hops are summarized. OSI layers are teaching approximations. The hexadecimal view encodes illustrative field text, not real serialized network packets. Only English is available. Optional Google Fonts have local fallback stacks. No deployment or backend service is required.
+This is a frontend, not a network sniffer or full protocol simulator. Timings, addresses, sequence values, and link headers are synthetic. Supported frames contain wire-format fields and valid IPv4/transport checksums, but are not captures; Ethernet FCS and preamble are omitted. Other protocols, multi-message handshakes, and DNS root/TLD referrals remain summarized and are explicitly labeled. OSI layers are teaching approximations. Only English is available, unlike the reference's multilingual lessons. Optional Google Fonts have local fallback stacks. No backend service is required.
 
 ## GitHub Pages
 

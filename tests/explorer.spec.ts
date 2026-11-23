@@ -109,7 +109,7 @@ test('every lesson renders its own flow and switching during playback clears the
   await expect(page.getByRole('button', { name: 'PLAY', exact: true })).toBeVisible();
   await page.keyboard.press('Control+k');
   await input.fill('no-such-protocol');
-  await expect(page.getByRole('heading', { name: 'No matching protocols' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'No matching protocols or stages' })).toBeVisible();
   await input.fill('r');
   await input.press('Space');
   await expect(input).toHaveValue('r ');
@@ -117,7 +117,8 @@ test('every lesson renders its own flow and switching during playback clears the
   await page.keyboard.press('Escape');
   await page.locator('.section-heading').first().click();
   await page.keyboard.press('ArrowRight');
-  await expect(page.locator('.current-packet')).toHaveAttribute('data-packet', '0');
+  await expect(page.locator('.step-narration h2')).toHaveText('DHCPOFFER');
+  await expect(page.locator('.current-packet')).toHaveAttribute('data-packet', '1');
   await page.keyboard.press('r');
   await expect(page.locator('.current-packet')).toHaveCount(0);
   await page.emulateMedia({ reducedMotion: 'reduce' });
