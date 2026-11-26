@@ -19,6 +19,7 @@ function readTheme(): 'dark' | 'light' {
 export default function App() {
   const [protocolId, setProtocolId] = useState('http');
   const [category, setCategory] = useState<Category | 'All'>('All');
+  const [layerFilter, setLayerFilter] = useState<number | null>(null);
   const [view, setView] = useState<'network' | 'sequence'>('network');
   const [theme, setTheme] = useState(readTheme);
   const [sidebar, setSidebar] = useState(() => !window.matchMedia('(max-width: 700px)').matches);
@@ -45,7 +46,7 @@ export default function App() {
   const table = useRef<HTMLDivElement>(null);
   const selectedItem = useRef<HTMLDivElement>(null);
   const protocol = protocols.find(item => item.id === protocolId)!;
-  const visible = protocols.filter(item => category === 'All' || item.category === category);
+  const visible = protocols.filter(item => (category === 'All' || item.category === category) && (layerFilter === null || item.layer === layerFilter));
   const normalizedQuery = query.toLowerCase().trim();
   const results = protocols.flatMap<{ protocol: Protocol; step: number | null }>(item => {
     const matches = `${item.name} ${item.longName} ${item.description} ${layerNames[item.layer - 1]} ${item.transport}`.toLowerCase().includes(normalizedQuery);
@@ -72,6 +73,11 @@ export default function App() {
     setZoom(1);
     const next = protocols.find(p => p.id === id)!;
     if (category !== 'All' && category !== next.category) setCategory('All');
+    if (layerFilter !== null && layerFilter !== next.layer) setLayerFilter(null);
+  }
+  function filterLayer(layer: number | null) {
+    setLayerFilter(previous => previous === layer ? null : layer);
+    setSidebar(true); setDiagramOnly(false);
   }
   function reset() { setPlaying(false); setCursor(-1); setInspection(null); setSelectedStep(null); scopeRef.current = null; }
   function closeInspector() { setInspection(null); inspectorOrigin.current?.focus({ preventScroll: true }); }
@@ -106,6 +112,8 @@ export default function App() {
   function selectResult(index: number) {
     const result = results[index];
     if (!result) return;
+    if (layerFilter !== null && layerFilter !== result.protocol.layer) setLayerFilter(null);
+    if (category !== 'All' && category !== result.protocol.category) setCategory('All');
     if (result.step === null) selectProtocol(result.protocol.id);
     else selectStep(result.step, result.protocol.id);
   }
@@ -249,7 +257,7 @@ export default function App() {
         <span className="brand-mark"><Box size={31} strokeWidth={1.35} /></span>
         <span><span className="brand-title">PROTOCOL <i>EXPLORER</i></span><span className="brand-tagline">LEARN HOW THE INTERNET WORKS</span></span>
       </a>
-      <div className="osi"><span className="small-label">OSI LAYER</span><div className="layers">{layerNames.map((name, index) => <span key={name} title={`Layer ${index + 1}: ${name}`} className={protocol.layer === index + 1 ? 'current' : ''}>{index + 1}</span>)}</div><span className="layer-name">{layerNames[protocol.layer - 1]}</span></div>
+      <div className="osi"><span className="small-label">OSI FILTER</span><div className="layers" role="group" aria-label="Filter by OSI layer"><button aria-pressed={layerFilter === null} onClick={() => filterLayer(null)}>All</button>{layerNames.map((name, index) => <button key={name} aria-label={`Layer ${index + 1}: ${name}`} aria-pressed={layerFilter === index + 1} aria-current={protocol.layer === index + 1 ? 'true' : undefined} title={`Filter layer ${index + 1}: ${name}${protocol.layer === index + 1 ? ' · current lesson' : ''}. Click again to clear.`} className={protocol.layer === index + 1 ? 'current' : ''} onClick={() => filterLayer(index + 1)}>{index + 1}</button>)}</div><span className="layer-name">Lesson: L{protocol.layer} {layerNames[protocol.layer - 1]}</span></div>
       <div className="header-actions">
         <button className="search-trigger" onClick={() => { setModal('search'); setQuery(''); setSearchIndex(0); }}><Search size={15} /><span>Search protocols</span><kbd>Ctrl K</kbd></button>
         <button className={`icon-button ${sidebar ? 'is-on' : ''}`} title="Protocol list (L)" aria-label="Toggle protocol list" aria-pressed={sidebar} onClick={() => setSidebar(value => !value)}><PanelLeft size={17} /></button>
@@ -267,7 +275,8 @@ export default function App() {
       {sidebar && !diagramOnly && <aside className="protocol-panel panel">
         <div className="section-heading"><h1>INTERNET PROTOCOLS</h1><span className="catalog-total">39</span><button className="icon-button mobile-catalog-close" aria-label="Close protocol list" onClick={() => setSidebar(false)}><X size={18} /></button></div>
         <nav className="category-tabs" aria-label="Protocol categories">{categories.map(item => <button key={item} aria-pressed={item === category} className={item === category ? 'active' : ''} onClick={() => setCategory(item)}>{item.toUpperCase()}<span>{item === 'All' ? protocols.length : protocols.filter(p => p.category === item).length}</span></button>)}</nav>
-        <div className="protocol-list">{visible.map(item => <div key={item.id} ref={item.id === protocolId ? selectedItem : undefined} className={`protocol-entry ${item.id === protocolId ? 'selected' : ''}`}>
+        <div className="catalog-filter-summary"><p role="status">{visible.length} {visible.length === 1 ? 'protocol' : 'protocols'} · {category}{layerFilter !== null ? ` · L${layerFilter} ${layerNames[layerFilter - 1]}` : ' · All layers'}</p>{(layerFilter !== null || category !== 'All') && <button onClick={() => { setLayerFilter(null); setCategory('All'); }}>Clear filters</button>}</div>
+        <div className="protocol-list">{!visible.length && <div className="empty-state"><h3>No protocols in this filter</h3><p>{layerFilter === 1 ? 'No lessons are currently classified as L1 Physical.' : 'No lessons match this category and OSI layer together.'} Choose another layer or category, or clear filters above. Your current lesson is still available in the diagram.</p></div>}{visible.map(item => <div key={item.id} ref={item.id === protocolId ? selectedItem : undefined} className={`protocol-entry ${item.id === protocolId ? 'selected' : ''}`}>
           <button className="protocol-button" aria-expanded={item.id === protocolId} onClick={() => selectProtocol(item.id)}><span className="protocol-symbol">{item.id === protocolId ? <Network size={15} /> : <span />}</span><span><strong>{item.name}</strong><small>{item.longName}</small></span>{item.id === protocolId ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</button>
           {item.id === protocolId && <div className="lesson-steps">{item.steps.map((step, index) => <button key={step.title} className={currentStep === index ? 'current-step' : ''} aria-current={currentStep === index ? 'step' : undefined} onClick={() => selectStep(index)}><span>{index + 1}</span>{step.title}{currentStep === index && <span className="step-active-dot" />}</button>)}</div>}
         </div>)}</div>
