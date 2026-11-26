@@ -291,8 +291,18 @@ export default function App() {
 
       {!diagramOnly && <aside className="overview-panel panel">
         <div className="section-heading"><h2>PROTOCOL OVERVIEW</h2><span className="tiny-square" /></div>
+        <details className="step-mechanism" open={inspection === null}>
+          <summary><span>How this step works</span><strong>{protocol.steps[currentStep].title}</strong></summary>
+          <div className="mechanism-body">
+            <p className="mechanism-context">{protocol.name} · Step {currentStep + 1} of {protocol.steps.length}{localStep ? ' · Local action' : ''}</p>
+            <h3>{protocol.steps[currentStep].mechanism.name}</h3>
+            <ol>{protocol.steps[currentStep].mechanism.walkthrough.map((text, index) => <li key={index}><strong>{['Input', 'Rule / decision', 'Result'][index]}</strong><p>{text}</p></li>)}</ol>
+            {protocol.steps[currentStep].mechanism.note && <p className="mechanism-note">{protocol.steps[currentStep].mechanism.note}</p>}
+            <p className="fine-print">Illustrative explanation, not an executing algorithm or packet capture.</p>
+            <div className="stage-navigation"><button disabled={currentStep === 0} onClick={() => selectStep(currentStep - 1)}>← Previous stage</button><button disabled={currentStep === protocol.steps.length - 1} onClick={() => selectStep(currentStep + 1)}>Next stage →</button></div>
+          </div>
+        </details>
         {inspector}
-        {selectedStep !== null && <section className="stage-details"><span>STEP {currentStep + 1} OF {protocol.steps.length}</span><h3>{protocol.steps[currentStep].title}</h3><p>{protocol.steps[currentStep].explanation}</p><div className="stage-navigation"><button disabled={currentStep === 0} onClick={() => selectStep(currentStep - 1)}>← Previous stage</button><button disabled={currentStep === protocol.steps.length - 1} onClick={() => selectStep(currentStep + 1)}>Next stage →</button></div></section>}
         <div className="overview-body"><div className="protocol-title"><h2>{protocol.name}</h2><span className="active-badge"><span />ACTIVE</span></div><p className="long-name">{protocol.longName}</p><p className="description">{protocol.description}</p>
           <dl className="metadata">
             <div><dt>Layer</dt><dd><span className="layer-badge">L{protocol.layer}</span> {layerNames[protocol.layer - 1]}</dd></div>

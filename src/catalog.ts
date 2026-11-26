@@ -1,5 +1,7 @@
 import { decodePacket } from './wire.ts';
 import type { WireExample } from './wire';
+import { mechanismsByProtocol } from './mechanisms.ts';
+import type { StepMechanism } from './mechanisms';
 
 export type Category = 'Core' | 'Application' | 'Security';
 export type NodeId = 'client' | 'router' | 'dns' | 'server' | 'internet';
@@ -15,7 +17,7 @@ export interface Packet {
   payload: string;
   wire?: WireExample;
 }
-export interface LessonStep { title: string; explanation: string }
+export interface LessonStep { title: string; explanation: string; mechanism: StepMechanism }
 export interface Protocol {
   id: string;
   name: string;
@@ -283,18 +285,22 @@ const definitions: Definition[] = [
   ]],
 ];
 
-export const protocols: Protocol[] = definitions.map(([name, longName, category, layer, port, transport, format, methods, standard, description, server, events]) => ({
-  id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-$/, ''),
-  name, longName, category, layer, port, transport, format, methods, standard, description, server,
-  steps: events.map(([title, explanation]) => ({ title, explanation })),
-  packets: events.map(([info, , reply = false, wire = name, payload = info, endpoint = 'server'], step) => ({
-    source: reply ? endpoint : 'client',
-    destination: reply ? 'client' : endpoint,
-    protocol: wire, info, size: wire === 'TCP' ? 66 : 80 + payload.length,
-    kind: wire.startsWith('DNS') ? 'dns' : wire === 'TCP' ? 'tcp' : reply ? 'response' : 'request',
-    step, payload,
-  })),
-}));
+export const protocols: Protocol[] = definitions.map(([name, longName, category, layer, port, transport, format, methods, standard, description, server, events]) => {
+  const mechanisms = mechanismsByProtocol[name];
+  if (!mechanisms || mechanisms.length !== events.length) throw new Error(`Missing or mismatched step mechanisms for ${name}`);
+  return {
+    id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-$/, ''),
+    name, longName, category, layer, port, transport, format, methods, standard, description, server,
+    steps: events.map(([title, explanation], index) => ({ title, explanation, mechanism: mechanisms[index] })),
+    packets: events.map(([info, , reply = false, wire = name, payload = info, endpoint = 'server'], step) => ({
+      source: reply ? endpoint : 'client',
+      destination: reply ? 'client' : endpoint,
+      protocol: wire, info, size: wire === 'TCP' ? 66 : 80 + payload.length,
+      kind: wire.startsWith('DNS') ? 'dns' : wire === 'TCP' ? 'tcp' : reply ? 'response' : 'request',
+      step, payload,
+    })),
+  };
+});
 
 const http = protocols[0];
 http.packets = [

@@ -208,10 +208,18 @@ summary { cursor: pointer; color: var(--blue); }
 .ascii-bytes { display: flex; }
 .byte-highlight { background: var(--selection); color: var(--blue); outline: 1px solid var(--blue); }
 .floating-inspector { position: fixed; right: 26px; top: 106px; bottom: 60px; width: 360px; max-width: calc(100vw - 32px); overflow-y: auto; z-index: 5; box-shadow: -8px 12px 32px #0004; }
-.stage-details { margin: 18px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
-.stage-details > span { font-size: 9px; color: var(--blue); }
-.stage-details h3 { font-size: 14px; font-weight: 500; margin: 9px 0; }
-.stage-details p { font-size: 10px; line-height: 1.8; color: var(--muted); }
+.step-mechanism { border-bottom: 1px solid var(--border); }
+.step-mechanism summary { padding: 15px 19px; font-size: 11px; line-height: 1.7; }
+.step-mechanism summary strong { display: block; color: var(--text); font-weight: 500; margin-top: 4px; }
+.mechanism-body { padding: 0 19px 18px; overflow-wrap: anywhere; }
+.mechanism-context { color: var(--muted); font-size: 10px; line-height: 1.7; }
+.mechanism-body h3 { font-size: 15px; font-weight: 500; line-height: 1.6; margin: 14px 0; }
+.mechanism-body ol { padding-left: 20px; margin: 0; }
+.mechanism-body li { padding-left: 4px; margin-bottom: 15px; font-size: 11px; line-height: 1.85; }
+.mechanism-body li::marker { color: var(--muted); }
+.mechanism-body li strong { color: var(--blue); font-weight: 500; }
+.mechanism-body li p { margin-top: 4px; }
+.mechanism-note { border-top: 1px solid var(--border); padding-top: 12px; margin: 4px 0 12px; font-size: 10px; line-height: 1.85; color: var(--muted); }
 .stage-navigation { display: flex; justify-content: space-between; gap: 10px; margin-top: 14px; }
 .stage-navigation button { font-size: 9px; color: var(--blue); }
 .step-narration .local-step-note { margin-top: 6px; color: var(--blue); }

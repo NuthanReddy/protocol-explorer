@@ -1,0 +1,88 @@
+import { test, expect } from '@playwright/test';
+
+const site = process.env.PREVIEW_URL ?? 'http://127.0.0.1:5173';
+
+test('mechanisms follow local stages, global stage search, keyboard navigation and protocol changes', async ({ page }) => {
+  await page.goto(site);
+  const mechanism = page.locator('.step-mechanism');
+  await expect(mechanism).toHaveAttribute('open', '');
+  await expect(mechanism.locator('h3')).toHaveText('Turn a URL into a resource request');
+  await page.getByRole('button', { name: /5\s*Page rendering/ }).click();
+  await expect(mechanism.locator('h3')).toHaveText('Build and paint a document');
+  await expect(mechanism).toContainText('Local action');
+  await expect(mechanism.locator('ol')).toContainText('DOM');
+  await expect(page.locator('.packet-table tbody tr')).toHaveCount(7);
+  await page.keyboard.press('Control+k');
+  await page.getByRole('textbox', { name: 'Search protocols' }).fill('Clock calculation');
+  await page.getByRole('textbox', { name: 'Search protocols' }).press('Enter');
+  await expect(mechanism.locator('.mechanism-context')).toContainText('NTP · Step 3 of 3');
+  await expect(mechanism.locator('ol')).toContainText('theta = ((T2 - T1) + (T3 - T4)) / 2');
+  await expect(mechanism).toContainText('symmetric path delay');
+  await mechanism.getByRole('button', { name: '← Previous stage' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(mechanism.locator('h3')).toHaveText('Return the server receive and send times');
+  await page.keyboard.press('Control+k');
+  await page.getByRole('textbox', { name: 'Search protocols' }).fill('Wi-Fi');
+  await page.getByRole('textbox', { name: 'Search protocols' }).press('Enter');
+  await expect(mechanism.locator('h3')).toHaveText('Actively discover nearby networks');
+  await page.locator('.section-heading').first().click();
+  await page.keyboard.press('5');
+  await expect(mechanism.locator('h3')).toHaveText('Contend for airtime and retry missing frames');
+  await expect(mechanism).toContainText('contention/backoff');
+  await expect(mechanism).toContainText('negotiated capabilities');
+  await page.getByRole('button', { name: 'Layer 4: Transport', exact: true }).click();
+  await expect(mechanism.locator('.mechanism-context')).toContainText('Wi-Fi · Step 5 of 5');
+});
+
+test('playback and packet inspection stay synchronized with the mechanism disclosure', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.goto(site);
+  await page.clock.pauseAt(new Date('2026-01-01T01:00:00Z'));
+  const mechanism = page.locator('.step-mechanism');
+  await page.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await expect(mechanism.locator('h3')).toHaveText('Resolve a name using cache and delegation');
+  await page.clock.runFor(2500);
+  await expect(mechanism.locator('h3')).toHaveText('Synchronize two TCP sequence spaces');
+  await page.clock.runFor(6100);
+  await expect(page.locator('.diagram-state')).toHaveText('FLOW COMPLETE');
+  await expect(mechanism.locator('h3')).toHaveText('Build and paint a document');
+  await page.getByRole('button', { name: /Inspect packet 1:/ }).click();
+  await expect(mechanism).not.toHaveAttribute('open', '');
+  await expect(mechanism.locator('summary')).toContainText('DNS resolution');
+  await mechanism.locator('summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(mechanism.locator('h3')).toHaveText('Resolve a name using cache and delegation');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect(mechanism.locator('summary')).toContainText('TCP connection');
+  await expect(page.locator('.inspector .packet-info')).toContainText('[SYN]');
+  await page.getByRole('button', { name: 'Close packet inspector' }).click();
+  await expect(mechanism).toHaveAttribute('open', '');
+  await page.getByRole('tab', { name: 'SEQUENCE' }).click();
+  await page.locator('.sequence-packet').nth(5).click();
+  await expect(mechanism.locator('summary')).toContainText('HTTP exchange');
+  await page.getByRole('button', { name: 'Close packet inspector' }).click();
+  await expect(mechanism.locator('h3')).toHaveText('Parse, dispatch and frame HTTP messages');
+  await page.getByRole('button', { name: 'RESET', exact: true }).click();
+  await expect(mechanism.locator('h3')).toHaveText('Turn a URL into a resource request');
+});
+
+test('mechanism walkthroughs are readable and keyboard-operable on narrow screens', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(site);
+  await page.getByRole('button', { name: 'Search protocols' }).click();
+  await page.getByRole('textbox', { name: 'Search protocols' }).fill('Validate chain of trust');
+  await page.getByRole('textbox', { name: 'Search protocols' }).press('Enter');
+  const mechanism = page.locator('.step-mechanism');
+  await mechanism.scrollIntoViewIfNeeded();
+  await expect(mechanism.locator('h3')).toHaveText('Classify the DNSSEC validation result');
+  await expect(mechanism.locator('ol li')).toHaveCount(3);
+  await expect(mechanism).toContainText('insecure delegation');
+  await expect(page.locator('body')).toHaveJSProperty('scrollWidth', 390);
+  await expect(page.getByRole('button', { name: 'PLAY', exact: true })).toBeInViewport();
+  await mechanism.locator('summary').focus();
+  await page.keyboard.press('Space');
+  await expect(mechanism).not.toHaveAttribute('open', '');
+  await page.keyboard.press('Enter');
+  await expect(mechanism).toHaveAttribute('open', '');
+});

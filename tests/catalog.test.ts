@@ -3,6 +3,27 @@ import assert from 'node:assert/strict';
 import { protocols, addressFor, packetTime } from '../src/catalog.ts';
 import { advanceTimeline, packetDuration, packetRoute, routePosition } from '../src/playback.ts';
 import { decodePacket, internetChecksum } from '../src/wire.ts';
+import { mechanismsByProtocol } from '../src/mechanisms.ts';
+
+test('all 168 stages have explicit input, decision and result walkthroughs without fallback content', () => {
+  assert.deepEqual(Object.keys(mechanismsByProtocol).sort(), protocols.map(p => p.name).sort());
+  assert.equal(protocols.reduce((sum, p) => sum + p.steps.length, 0), 168);
+  for (const protocol of protocols) {
+    assert.equal(mechanismsByProtocol[protocol.name].length, protocol.steps.length, protocol.name);
+    for (const step of protocol.steps) {
+      const { name, walkthrough, note } = step.mechanism;
+      assert.notEqual(name, step.title, `${protocol.name}: mechanism must explain more than the stage title`);
+      assert.ok(name.length > 10, `${protocol.name}: informative mechanism name`);
+      assert.equal(walkthrough.length, 3);
+      assert.ok(walkthrough.every(text => text.trim().split(/\s+/).length >= 6), `${protocol.name}: explanatory input/rule/result`);
+      assert.ok(note && note.length > 35, `${protocol.name}: scope and implementation caveat`);
+    }
+  }
+  const ntp = protocols.find(p => p.name === 'NTP')!;
+  assert.match(ntp.steps[2].mechanism.walkthrough[1], /\(\(T2 - T1\) \+ \(T3 - T4\)\) \/ 2/);
+  assert.match(protocols[0].steps[4].mechanism.walkthrough.join(' '), /DOM.*layout.*paint/);
+  assert.match(protocols.find(p => p.name === 'Wi-Fi')!.steps[2].mechanism.walkthrough[1], /Open System.*SAE/);
+});
 
 test('catalog contains 39 unique original lessons with accurate category totals', () => {
   assert.equal(protocols.length, 39);
